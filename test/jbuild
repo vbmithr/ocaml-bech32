@@ -3,7 +3,7 @@
 (executable
  ((name test)
   (modules (Test))
-  (libraries (hex bech32 alcotest))))
+  (libraries (hex sodium bech32 alcotest))))
 
 (alias
  ((name    runtest)

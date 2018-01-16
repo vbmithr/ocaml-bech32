@@ -5,79 +5,6 @@
 open Rresult
 open Astring
 
-module Pack = struct
-  module IntLen = struct
-    let mask v = function
-      | 0 -> 0
-      | 1 -> v land 0x01
-      | 2 -> v land 0x03
-      | 3 -> v land 0x07
-      | 4 -> v land 0x0f
-      | 5 -> v land 0x1f
-      | 6 -> v land 0x3f
-      | 7 -> v land 0x7f
-      | 8 -> v
-      | _ -> invalid_arg "Packer.IntLen.mask"
-
-    type t = {
-      v : int ;
-      len : int ;
-    }
-
-    let length { len } = len
-
-    let empty = { v = 0 ; len = 0 }
-    let create ~len v = { v ; len }
-
-    let to_int { v ; len } = mask v len
-    let (<<) t i = to_int t lsl i
-    let (>>) t i = to_int t lsr i
-
-    let reduce ~size ({ v ; len } as t) =
-      match len - size with
-      | newlen when newlen < 0 -> None
-      | newlen -> Some (t >> newlen, { v ; len = newlen })
-
-    let concat ~size ({ v ; len } as t) ({ v = v2 ; len = len2 } as t2) =
-      if len + len2 < size then
-        None,
-        { v = (t << len2) lor (to_int t2) ; len = len + len2 }
-      else
-        let needed = size - len in
-        let unneeded = len2 - needed in
-        Some ((t << needed) lor v2 lsr unneeded),
-        { v = v2 ; len = unneeded }
-  end
-
-  type t = {
-    size : int ;
-    acc : int list ;
-    p : IntLen.t ;
-  }
-
-  let create ~size =
-    if size < 1 || size > 7 then
-      invalid_arg "Packer.create" ;
-    { size ; acc = [] ; p = IntLen.empty }
-
-  let rec feed ({ size ; acc ; p } as t) v =
-    let v = IntLen.create ~len:8 v in
-    match IntLen.concat ~size p v with
-    | None, p' -> { t with p = p' }
-    | Some e, p' ->
-      match IntLen.reduce ~size p' with
-      | None -> { t with acc = e :: acc ; p = p' }
-      | Some (e', p') -> { t with acc = e' :: e :: acc ; p = p' }
-
-  let feed_char t c = feed t (Char.to_int c)
-
-  let finalize { size ; acc ; p } =
-    List.rev IntLen.((p << (size - p.len)) :: acc)
-
-  let of_string ~size s =
-    String.fold_left feed_char (create ~size) s |> finalize
-end
-
 module Int32 = struct
   include Int32
   external (~-) : t -> t = "%int32_neg"
@@ -92,15 +19,41 @@ module Int32 = struct
   let of_char c = c |> Char.to_int |> of_int
 end
 
-(* let generator = [0x3b6a57b2l; 0x26508e6dl; 0x1ea119fal; 0x3d4233ddl; 0x2a1462b3l] *)
-(* let polymod vs =
- *   ListLabels.fold_left vs ~init:1l ~f:begin fun chk v ->
- *     let top = Int32.(chk lsr 25) in
- *     let chk = Int32.(((chk land 0x1fff_ffffl) lsl 5) lxor v) in
- *     ListLabels.fold_left generator ~init:(chk, 0) ~f:begin fun (chk, i) g ->
- *         Int32.logxor chk (if Int32.((top lsr i) land 1l) <> 0l then g else 0l), succ i
- *       end |> fst
- *   end *)
+let convertbits_exn ~pad ~frombits ~tobits data =
+  let maxv = (1 lsl tobits) - 1 in
+  let ret, bits, acc =
+    String.fold_left begin fun (ret, bits, acc) v ->
+      let v = Char.to_int v in
+      if v < 0 || (v lsr frombits) <> 0 then
+        invalid_arg ("convertbits_exn: invalid data " ^ string_of_int v) ;
+      let acc = (acc lsl frombits) lor v in
+      let bits = bits + frombits in
+      let rec loop ret bits =
+        if bits >= tobits then begin
+          let bits = bits - tobits in
+          loop ((acc lsr bits) land maxv :: ret) bits
+        end
+        else ret, bits in
+      let ret, bits = loop ret bits in
+      ret, bits, acc
+    end ([], 0, 0) data in
+  let ret =
+    let shift = tobits - bits in
+    if pad then
+      if bits <> 0 then ((acc lsl shift) land maxv) :: ret
+      else ret
+    else if ((acc lsl shift) land maxv) <> 0 || bits >= frombits then
+      invalid_arg "convertbits_exn"
+    else ret in
+  let buf = Bytes.create (List.length ret) in
+  let _ = List.fold_right begin fun c i ->
+      Bytes.set buf i (Char.of_byte c); succ i
+    end ret 0 in
+  Bytes.unsafe_to_string buf
+
+let convertbits ~pad ~frombits ~tobits data =
+  try Ok (convertbits_exn ~pad ~frombits ~tobits data)
+  with Invalid_argument msg -> Error msg
 
 let polymod_step pre =
   let open Int32 in
@@ -137,40 +90,46 @@ let check_hrp chk i hrp =
     Ok (chk, i)
   with Exit -> Error "invalid hrp"
 
-let encode ~hrp data =
-  let data = Pack.of_string ~size:5 data in
-  let datalen = List.length data in
+let encode5 ~hrp data =
+  let datalen = String.length data in
   check_hrp 1l 0 hrp >>= fun (chk, i) ->
   (if i + 7 + datalen > 90 then
      Error "data too long" else Ok ()) >>= fun () ->
   let chk = polymod_step chk in
   let buf = Bytes.create String.(length hrp + 1 + datalen + 6) in
-  let chk, i = String.fold_left (fun (a, i) c ->
+  let chk, i =
+    String.fold_left begin fun (a, i) c ->
       Bytes.set buf i c ;
       Int32.logxor (polymod_step a) (Char.to_int c land 0x1f |> Int32.of_int),
-      succ i) (chk, 0) hrp in
+      succ i
+    end (chk, 0) hrp in
   Bytes.set buf i '1' ;
   let chk, i =
-    List.fold_left (fun (a, i) d ->
-        Bytes.set buf i (String.get charset d) ;
-        Int32.logxor (polymod_step a) (Int32.of_int d), succ i)
-      (chk, succ i) data in
+    String.fold_left begin fun (a, i) c ->
+      let c = Char.to_int c in
+      Bytes.set buf i (String.get charset c) ;
+      Int32.logxor (polymod_step a) (Int32.of_int c), succ i
+    end (chk, succ i) data in
   let chk = List.fold_left
       (fun a () -> polymod_step a) chk [();();();();();()] in
   let chk = Int32.(chk lxor 1l) in
   let compute_chk chk i =
     let shift = (5 - i) * 5 in
     Int32.((chk lsr shift) land 0x1fl |> to_int) in
-  for i = i to i+5 do
-    Bytes.set buf i (String.get charset (compute_chk chk i))
+  for j = 0 to 5 do
+    Bytes.set buf (i+j) (String.get charset (compute_chk chk j))
   done ;
   Ok (Bytes.unsafe_to_string buf)
+
+let encode ~hrp data =
+  convertbits ~pad:true ~frombits:8 ~tobits:5 data >>=
+  encode5 ~hrp
 
 let decode bech32 =
   let len = String.length bech32 in
   (if len < 8 || len > 90 then
      Error "bad input length" else Ok ()) >>= fun () ->
-  match String.cut bech32 ~sep:"1" with
+  match String.cut ~rev:true bech32 ~sep:"1" with
   | None -> Error "missing separator"
   | Some (hrp, payload) ->
     let hrplen = String.length hrp in
@@ -179,12 +138,15 @@ let decode bech32 =
        Error "bad hrp/payload length" else Ok ()) >>= fun () ->
     let have_upper = ref false in
     let have_lower = ref false in
-    let chk = String.fold_left begin fun a c ->
+    begin try String.fold_left begin fun a c ->
+        let cint = Char.(to_int (Ascii.lowercase c)) in
+        if cint < 33 || cint > 126 then raise Exit ;
         if Char.Ascii.is_upper c then have_upper := true ;
         if Char.Ascii.is_lower c then have_lower := true ;
-        Int32.logxor (polymod_step a)
-          (Char.(to_int (Ascii.lowercase c)) lsr 5 |> Int32.of_int)
-      end 1l hrp in
+        Int32.logxor (polymod_step a) (cint lsr 5 |> Int32.of_int)
+      end 1l hrp |> R.ok
+      with Exit -> Error "invalid hrp char"
+    end >>= fun chk ->
     let chk = polymod_step chk in
     let chk = String.fold_left begin fun a c ->
         Int32.logxor (polymod_step a) (Char.to_int c land 0x1f |> Int32.of_int)
@@ -202,11 +164,52 @@ let decode bech32 =
           Int32.logxor (polymod_step a) (Int32.of_int v),
           succ i
         end (chk, 0) payload |> fst |> R.ok
-      with Exit -> Error "invalid data"
+      with _ -> Error "invalid data"
     end >>= fun chk ->
     if !have_upper <> !have_lower && chk = 1l then
       Ok (hrp, Bytes.unsafe_to_string buf)
     else Error "wrong chksum or mixed case"
+
+module Segwit = struct
+  type t = {
+    testnet : bool ;
+    version : int ;
+    prog : string ;
+  }
+
+  let create ?(testnet=false) ~version prog =
+    { testnet ; version ; prog }
+
+  let encode { testnet ; version ; prog } =
+    let hrp = if testnet then "tb" else "bc" in
+    let prog = convertbits_exn ~pad:true ~frombits:8 ~tobits:5 prog in
+    let proglen = String.length prog in
+    let buf = Bytes.create (proglen + 1) in
+    Bytes.set buf 0 (Char.of_byte version) ;
+    Bytes.blit_string prog 0 buf 1 proglen ;
+    encode5 ~hrp (Bytes.unsafe_to_string buf)
+
+  let decode addr =
+    decode addr >>= fun (hrp, data) ->
+    let datalen = String.length data in
+    (if datalen < 5 then Error "invalid segwit data" else Ok ()) >>= fun () ->
+    let hrplow = String.Ascii.lowercase hrp in
+    (match hrplow with
+     | "bc" -> Ok false
+     | "tb" -> Ok true
+     | _ -> Error ("invalid segwit hrp " ^ hrp)) >>= fun testnet ->
+    let decoded = String.(sub data ~start:1 ~stop:datalen |> Sub.to_string) in
+    convertbits decoded ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
+    let decodedlen = String.length decoded in
+    (if decodedlen = 0 || decodedlen < 2 || decodedlen > 40
+     then Error "invalid segwit data" else Ok ()) >>= fun () ->
+    let version = String.get data 0 |> Char.to_int in
+    (if version > 16 then
+       Error "invalid segwit version" else Ok ()) >>= fun () ->
+    (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
+       Error "invalid segwit length" else Ok ()) >>= fun () ->
+    Ok (create ~testnet ~version decoded)
+end
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2018 Vincent Bernardoff
