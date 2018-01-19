@@ -1,0 +1,17 @@
+opam-version: "1.2"
+name: "bech32"
+version: "0.1"
+maintainer: "Vincent Bernardoff <vb@luminar.eu.org>"
+authors: ["Vincent Bernardoff <vb@luminar.eu.org>"]
+homepage: "https://github.com/vbmithr/ocaml-bech32"
+license: "ISC"
+dev-repo: "https://github.com/vbmithr/ocaml-bech32.git"
+bug-reports: "https://github.com/vbmithr/ocaml-bech32/issues"
+tags: []
+available: [ ocaml-version >= "4.03.0"]
+depends: [
+  "jbuilder" {build & >= "1.0+beta16"}
+  "rresult" {>= "0.5.0"}
+  "astring" {>= "0.8.3"}
+]
+build: [ "jbuilder" "build" "-j" jobs "-p" name "@install" ]
