@@ -12,10 +12,10 @@ let compare_bytes expected s =
     failwith (Format.asprintf "Got %a, expected %a\n" Hex.pp s Hex.pp expected)
 
 let test_changebase_simple () =
-  let open Sodium in
-  Random.stir () ;
+  let buf = Bigstring.create 100 in
   for i = 0 to 100 do
-    let rand = Random.Bytes.generate 100 |> Bytes.unsafe_to_string in
+    let _ = Monocypher.Rand.write buf in
+    let rand = Bigstring.to_string buf in
     match convertbits ~pad:true ~frombits:8 ~tobits:5 rand with
     | Error msg ->
       failwith (Printf.sprintf "from %d to %d: %s" 8 5 msg)
@@ -27,12 +27,12 @@ let test_changebase_simple () =
   done
 
 let test_changebase () =
-  let open Sodium in
-  Random.stir () ;
+  let buf = Bigstring.create 100 in
   for i = 0 to 100 do
     for frombits = 5 to 8 do
       for tobits = 5 to 8 do
-        let rand = Random.Bytes.generate 100 |> Bytes.unsafe_to_string in
+        let _ = Monocypher.Rand.write buf in
+        let rand = Bigstring.to_string buf in
         match convertbits ~pad:true ~frombits:8 ~tobits:frombits rand with
         | Error msg ->
           failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
