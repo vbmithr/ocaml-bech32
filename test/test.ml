@@ -1,5 +1,6 @@
 open Astring
 open Bech32
+open Alcotest
 
 let compare_string expected s =
   if s <> expected then
@@ -13,7 +14,7 @@ let compare_bytes expected s =
 
 let test_changebase_simple () =
   let buf = Bigstring.create 100 in
-  for i = 0 to 100 do
+  for _ = 0 to 100 do
     let _ = Monocypher.Rand.write buf in
     let rand = Bigstring.to_string buf in
     match convertbits ~pad:true ~frombits:8 ~tobits:5 rand with
@@ -26,28 +27,28 @@ let test_changebase_simple () =
       | Ok rand'' -> compare_bytes rand rand''
   done
 
-let test_changebase () =
-  let buf = Bigstring.create 100 in
-  for i = 0 to 100 do
-    for frombits = 5 to 8 do
-      for tobits = 5 to 8 do
-        let _ = Monocypher.Rand.write buf in
-        let rand = Bigstring.to_string buf in
-        match convertbits ~pad:true ~frombits:8 ~tobits:frombits rand with
-        | Error msg ->
-          failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
-        | Ok rand' ->
-          match convertbits ~pad:true ~frombits ~tobits rand' with
-          | Error msg ->
-            failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
-          | Ok rand'' ->
-            match convertbits ~pad:false ~frombits:tobits ~tobits:frombits rand' with
-            | Error msg ->
-              failwith (Printf.sprintf "from %d to %d: %s" tobits frombits msg)
-            | Ok rand''' -> compare_bytes rand rand''
-      done
-    done
-  done
+(* let test_changebase () =
+ *   let buf = Bigstring.create 100 in
+ *   for _ = 0 to 100 do
+ *     for frombits = 5 to 8 do
+ *       for tobits = 5 to 8 do
+ *         let _ = Monocypher.Rand.write buf in
+ *         let rand = Bigstring.to_string buf in
+ *         match convertbits ~pad:true ~frombits:8 ~tobits:frombits rand with
+ *         | Error msg ->
+ *           failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
+ *         | Ok rand' ->
+ *           match convertbits ~pad:true ~frombits ~tobits rand' with
+ *           | Error msg ->
+ *             failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
+ *           | Ok rand'' ->
+ *             match convertbits ~pad:false ~frombits:tobits ~tobits:frombits rand' with
+ *             | Error msg ->
+ *               failwith (Printf.sprintf "from %d to %d: %s" tobits frombits msg)
+ *             | Ok rand''' -> compare_bytes rand rand''
+ *       done
+ *     done
+ *   done *)
 
 let test_changebase = [
   "random_simple", `Quick, test_changebase_simple ;
@@ -73,13 +74,16 @@ let segwit_scriptpubkey ?(version=0) witprog =
 let decode_check_valid hex v () =
   match Segwit.decode v with
   | Error msg -> failwith msg
-  | Ok ({ testnet ; version ; prog } as t) ->
-    let script = segwit_scriptpubkey ~version prog in
-    let `Hex decoded = Hex.of_string script in
-    compare_string hex decoded ;
-    match Segwit.encode t with
-    | Error msg -> failwith msg
-    | Ok addr -> compare_string (String.Ascii.lowercase v) addr
+  | Ok ({ network = _ ; version ; prog } as t) ->
+    match version with
+    | None -> fail "version"
+    | Some version ->
+      let script = segwit_scriptpubkey ~version prog in
+      let `Hex decoded = Hex.of_string script in
+      compare_string hex decoded ;
+      match Segwit.encode t with
+      | Error msg -> failwith msg
+      | Ok addr -> compare_string (String.Ascii.lowercase v) addr
 
 let decode_check_valid = ListLabels.map valid_vectors ~f:begin fun (hex, v) ->
     v, `Quick, decode_check_valid hex v
@@ -101,8 +105,8 @@ let invalid_vectors = [
 let decode_invalid v () =
   match Segwit.decode v with
   | Error _ -> ()
-  | Ok { testnet; version; prog } ->
-    failwith (Printf.sprintf "testnet=%b, version=%d, prog=[%S]" testnet version prog)
+  | Ok { network = _ ; version = _ ; prog } ->
+    failwith (Printf.sprintf "prog=[%S]" prog)
 
 let decode_check_invalid = ListLabels.map invalid_vectors ~f:begin fun v ->
     v, `Quick, decode_invalid v
@@ -140,7 +144,7 @@ let valid_encoding s () =
 
 let invalid_encoding s () =
   match decode s with
-  | Error msg -> ()
+  | Error _ -> ()
   | Ok _ -> failwith ""
 
 let decode_valid =

@@ -11,15 +11,20 @@ val encode5 : hrp:string -> string -> (string, string) result
 val decode : string -> (string * string, string) result
 
 module Segwit : sig
+  type network =
+    | Bitcoin
+    | BitcoinTest
+    | Zilliqa
+
   type t = private {
-    testnet : bool ;
-    version : int ;
+    network : network ;
+    version : int option ;
     prog : string ;
   }
 
-  val create : ?testnet:bool -> version:int -> string -> t
+  val create : ?version:int -> network:network -> string -> t
   val encode : t -> (string, string) result
-  val decode : string -> (t, string) result
+  val decode : ?version:bool-> string -> (t, string) result
 end
 
 (*---------------------------------------------------------------------------

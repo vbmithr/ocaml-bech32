@@ -8,12 +8,12 @@ open Astring
 module Int32 = struct
   include Int32
   external (~-) : t -> t = "%int32_neg"
-  external (+) : t -> t -> t = "%int32_add"
-  external (-) : t -> t -> t = "%int32_sub"
+  (* external (+) : t -> t -> t = "%int32_add"
+   * external (-) : t -> t -> t = "%int32_sub" *)
   external (lsl) : t -> int -> t = "%int32_lsl"
   external (lsr) : t -> int -> t = "%int32_lsr"
   external (land) : t -> t -> t = "%int32_and"
-  external (lor) : t -> t -> t = "%int32_or"
+  (* external (lor) : t -> t -> t = "%int32_or" *)
   external (lxor) : t -> t -> t = "%int32_xor"
 
   let of_char c = c |> Char.to_int |> of_int
@@ -72,9 +72,9 @@ let charset_rev = [|
   -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1;
   15; -1; 10; 17; 21; 20; 26; 30;  7;  5; -1; -1; -1; -1; -1; -1;
   -1; 29; -1; 24; 13; 25;  9;  8; 23; -1; 18; 22; 31; 27; 19; -1;
-   1;  0;  3; 16; 11; 28; 12; 14;  6;  4;  2; -1; -1; -1; -1; -1;
+  1;  0;  3; 16; 11; 28; 12; 14;  6;  4;  2; -1; -1; -1; -1; -1;
   -1; 29; -1; 24; 13; 25;  9;  8; 23; -1; 18; 22; 31; 27; 19; -1;
-   1;  0;  3; 16; 11; 28; 12; 14;  6;  4;  2; -1; -1; -1; -1; -1
+  1;  0;  3; 16; 11; 28; 12; 14;  6;  4;  2; -1; -1; -1; -1; -1
 |]
 
 let invalid_hrp c =
@@ -145,7 +145,7 @@ let decode bech32 =
         if Char.Ascii.is_lower c then have_lower := true ;
         Int32.logxor (polymod_step a) (cint lsr 5 |> Int32.of_int)
       end 1l hrp |> R.ok
-      with Exit -> Error "invalid hrp char"
+      with Exit -> Error ("invalid hrp char in " ^ hrp)
     end >>= fun chk ->
     let chk = polymod_step chk in
     let chk = String.fold_left begin fun a c ->
@@ -171,44 +171,70 @@ let decode bech32 =
     else Error "wrong chksum or mixed case"
 
 module Segwit = struct
+  type network =
+    | Bitcoin
+    | BitcoinTest
+    | Zilliqa
+
+  let string_of_network = function
+    | Bitcoin -> "bc"
+    | BitcoinTest -> "tb"
+    | Zilliqa -> "zil"
+
   type t = {
-    testnet : bool ;
-    version : int ;
+    network : network ;
+    version : int option ;
     prog : string ;
   }
 
-  let create ?(testnet=false) ~version prog =
-    { testnet ; version ; prog }
+  let create ?version ~network prog =
+    { network ; version ; prog }
 
-  let encode { testnet ; version ; prog } =
-    let hrp = if testnet then "tb" else "bc" in
+  let encode { network ; version ; prog } =
     let prog = convertbits_exn ~pad:true ~frombits:8 ~tobits:5 prog in
     let proglen = String.length prog in
-    let buf = Bytes.create (proglen + 1) in
-    Bytes.set buf 0 (Char.of_byte version) ;
-    Bytes.blit_string prog 0 buf 1 proglen ;
-    encode5 ~hrp (Bytes.unsafe_to_string buf)
+    match version with
+    | None ->
+      let buf = Bytes.create proglen in
+      Bytes.blit_string prog 0 buf 0 proglen ;
+      encode5 ~hrp:(string_of_network network) (Bytes.unsafe_to_string buf)
+    | Some version ->
+      let buf = Bytes.create (proglen + 1) in
+      Bytes.set buf 0 (Char.of_byte version) ;
+      Bytes.blit_string prog 0 buf 1 proglen ;
+      encode5 ~hrp:(string_of_network network) (Bytes.unsafe_to_string buf)
 
-  let decode addr =
+  let decode ?(version=true) addr =
     decode addr >>= fun (hrp, data) ->
     let datalen = String.length data in
     (if datalen < 5 then Error "invalid segwit data" else Ok ()) >>= fun () ->
     let hrplow = String.Ascii.lowercase hrp in
     (match hrplow with
-     | "bc" -> Ok false
-     | "tb" -> Ok true
-     | _ -> Error ("invalid segwit hrp " ^ hrp)) >>= fun testnet ->
-    let decoded = String.(sub data ~start:1 ~stop:datalen |> Sub.to_string) in
-    convertbits decoded ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
-    let decodedlen = String.length decoded in
-    (if decodedlen = 0 || decodedlen < 2 || decodedlen > 40
-     then Error "invalid segwit data" else Ok ()) >>= fun () ->
-    let version = String.get data 0 |> Char.to_int in
-    (if version > 16 then
-       Error "invalid segwit version" else Ok ()) >>= fun () ->
-    (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
-       Error "invalid segwit length" else Ok ()) >>= fun () ->
-    Ok (create ~testnet ~version decoded)
+     | "bc" -> Ok Bitcoin
+     | "tb" -> Ok BitcoinTest
+     | "zil" -> Ok Zilliqa
+     | _ -> Error ("invalid segwit hrp " ^ hrp)) >>= fun network ->
+    match version with
+    | false ->
+      convertbits data ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
+      let decodedlen = String.length decoded in
+      (if decodedlen = 0 || decodedlen < 2 || decodedlen > 40
+       then Error "invalid segwit data" else Ok ()) >>= fun () ->
+      (if decodedlen <> 20 && decodedlen <> 32 then
+         Error "invalid segwit length" else Ok ()) >>= fun () ->
+      Ok (create ~network decoded)
+    | true ->
+      let decoded = String.(sub data ~start:1 ~stop:datalen |> Sub.to_string) in
+      convertbits decoded ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
+      let decodedlen = String.length decoded in
+      (if decodedlen = 0 || decodedlen < 2 || decodedlen > 40
+       then Error "invalid segwit data" else Ok ()) >>= fun () ->
+      let version = String.get data 0 |> Char.to_int in
+      (if version > 16 then
+         Error "invalid segwit version" else Ok ()) >>= fun () ->
+      (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
+         Error "invalid segwit length" else Ok ()) >>= fun () ->
+      Ok (create ~network ~version decoded)
 end
 
 (*---------------------------------------------------------------------------
