@@ -225,6 +225,9 @@ module Segwit = struct
     | Error e -> invalid_arg ("encode_exn: " ^ e)
     | Ok v -> v
 
+  let pp ppf t =
+    Format.fprintf ppf "%s" (encode_exn t)
+
   let decode (type a) network addr =
     let module N = (val network : NETWORK with type t = a) in
     decode addr >>= fun (hrp, data) ->

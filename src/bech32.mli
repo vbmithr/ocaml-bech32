@@ -28,6 +28,8 @@ module Segwit : sig
     prog : string ;
   }
 
+  val pp : Format.formatter -> _ t -> unit
+
   val create : (module NETWORK with type t = 'a) -> string -> 'a t
 
   val encode : _ t -> (string, string) result
