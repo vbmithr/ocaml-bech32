@@ -171,49 +171,60 @@ let decode bech32 =
     else Error "wrong chksum or mixed case"
 
 module Segwit = struct
-  type network =
-    | Bitcoin
-    | BitcoinTest
-    | Zilliqa
+  module type NETWORK = sig
+    type t
 
-  let string_of_network = function
-    | Bitcoin -> "bc"
-    | BitcoinTest -> "tb"
-    | Zilliqa -> "zil"
+    val t : t
+    val prefix : string
+  end
 
-  type t = {
-    network : network ;
+  module Btc = struct
+    type t = [`Btc]
+    let t = `Btc
+    let prefix = "bc"
+  end
+  module Tbtc = struct
+    type t = [`Tbtc]
+    let t = `Tbtc
+    let prefix = "tb"
+  end
+  module Zil = struct
+    type t = [`Zil]
+    let t = `Zil
+    let prefix = "zil"
+  end
+
+  type 'a t = {
+    network : (module NETWORK with type t = 'a) ;
     version : int option ;
     prog : string ;
   }
 
-  let create ?version ~network prog =
-    { network ; version ; prog }
+  let create ?version network prog = { network ; version ; prog }
 
-  let encode { network ; version ; prog } =
+  let encode (type a) ({ network ; version ; prog } : a t) =
+    let module N = (val network : NETWORK with type t = a) in
     let prog = convertbits_exn ~pad:true ~frombits:8 ~tobits:5 prog in
     let proglen = String.length prog in
     match version with
     | None ->
       let buf = Bytes.create proglen in
       Bytes.blit_string prog 0 buf 0 proglen ;
-      encode5 ~hrp:(string_of_network network) (Bytes.unsafe_to_string buf)
+      encode5 ~hrp:N.prefix (Bytes.unsafe_to_string buf)
     | Some version ->
       let buf = Bytes.create (proglen + 1) in
       Bytes.set buf 0 (Char.of_byte version) ;
       Bytes.blit_string prog 0 buf 1 proglen ;
-      encode5 ~hrp:(string_of_network network) (Bytes.unsafe_to_string buf)
+      encode5 ~hrp:N.prefix (Bytes.unsafe_to_string buf)
 
-  let decode ?(version=true) addr =
+  let decode (type a) ?(version=true) network addr =
+    let module N = (val network : NETWORK with type t = a) in
     decode addr >>= fun (hrp, data) ->
     let datalen = String.length data in
     (if datalen < 5 then Error "invalid segwit data" else Ok ()) >>= fun () ->
     let hrplow = String.Ascii.lowercase hrp in
-    (match hrplow with
-     | "bc" -> Ok Bitcoin
-     | "tb" -> Ok BitcoinTest
-     | "zil" -> Ok Zilliqa
-     | _ -> Error ("invalid segwit hrp " ^ hrp)) >>= fun network ->
+    if hrplow <> N.prefix then
+      Error ("invalid segwit hrp " ^ hrp) else Ok () >>= fun () ->
     match version with
     | false ->
       convertbits data ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
@@ -222,7 +233,7 @@ module Segwit = struct
        then Error "invalid segwit data" else Ok ()) >>= fun () ->
       (if decodedlen <> 20 && decodedlen <> 32 then
          Error "invalid segwit length" else Ok ()) >>= fun () ->
-      Ok (create ~network decoded)
+      Ok (create network decoded)
     | true ->
       let decoded = String.(sub data ~start:1 ~stop:datalen |> Sub.to_string) in
       convertbits decoded ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
@@ -234,7 +245,7 @@ module Segwit = struct
          Error "invalid segwit version" else Ok ()) >>= fun () ->
       (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
          Error "invalid segwit length" else Ok ()) >>= fun () ->
-      Ok (create ~network ~version decoded)
+      Ok (create network ~version decoded)
 end
 
 (*---------------------------------------------------------------------------

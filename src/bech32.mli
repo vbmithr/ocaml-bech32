@@ -11,20 +11,26 @@ val encode5 : hrp:string -> string -> (string, string) result
 val decode : string -> (string * string, string) result
 
 module Segwit : sig
-  type network =
-    | Bitcoin
-    | BitcoinTest
-    | Zilliqa
+  module type NETWORK = sig
+    type t
 
-  type t = private {
-    network : network ;
+    val t : t
+    val prefix : string
+  end
+
+  module Btc : NETWORK with type t = [`Btc]
+  module Tbtc : NETWORK with type t = [`Tbtc]
+  module Zil : NETWORK with type t = [`Zil]
+
+  type 'a t = private {
+    network : (module NETWORK with type t = 'a) ;
     version : int option ;
     prog : string ;
   }
 
-  val create : ?version:int -> network:network -> string -> t
-  val encode : t -> (string, string) result
-  val decode : ?version:bool-> string -> (t, string) result
+  val create : ?version:int -> (module NETWORK with type t = 'a) -> string -> 'a t
+  val encode : _ t -> (string, string) result
+  val decode : ?version:bool -> (module NETWORK with type t = 'a) -> string -> ('a t, string) result
 end
 
 (*---------------------------------------------------------------------------
