@@ -29,8 +29,12 @@ module Segwit : sig
   }
 
   val create : ?version:int -> (module NETWORK with type t = 'a) -> string -> 'a t
+
   val encode : _ t -> (string, string) result
+  val encode_exn : _ t -> string
+
   val decode : ?version:bool -> (module NETWORK with type t = 'a) -> string -> ('a t, string) result
+  val decode_exn : ?version:bool -> (module NETWORK with type t = 'a) -> string -> 'a t
 end
 
 (*---------------------------------------------------------------------------

@@ -217,6 +217,11 @@ module Segwit = struct
       Bytes.blit_string prog 0 buf 1 proglen ;
       encode5 ~hrp:N.prefix (Bytes.unsafe_to_string buf)
 
+  let encode_exn t =
+    match encode t with
+    | Error e -> invalid_arg ("encode_exn: " ^ e)
+    | Ok v -> v
+
   let decode (type a) ?(version=true) network addr =
     let module N = (val network : NETWORK with type t = a) in
     decode addr >>= fun (hrp, data) ->
@@ -246,6 +251,11 @@ module Segwit = struct
       (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
          Error "invalid segwit length" else Ok ()) >>= fun () ->
       Ok (create network ~version decoded)
+
+  let decode_exn ?version net t =
+    match decode ?version net t with
+    | Error e -> invalid_arg ("decode_exn: " ^ e)
+    | Ok v -> v
 end
 
 (*---------------------------------------------------------------------------
