@@ -15,6 +15,7 @@ module Segwit : sig
     type t
 
     val t : t
+    val version : int option
     val prefix : string
   end
 
@@ -24,17 +25,16 @@ module Segwit : sig
 
   type 'a t = private {
     network : (module NETWORK with type t = 'a) ;
-    version : int option ;
     prog : string ;
   }
 
-  val create : ?version:int -> (module NETWORK with type t = 'a) -> string -> 'a t
+  val create : (module NETWORK with type t = 'a) -> string -> 'a t
 
   val encode : _ t -> (string, string) result
   val encode_exn : _ t -> string
 
-  val decode : ?version:bool -> (module NETWORK with type t = 'a) -> string -> ('a t, string) result
-  val decode_exn : ?version:bool -> (module NETWORK with type t = 'a) -> string -> 'a t
+  val decode : (module NETWORK with type t = 'a) -> string -> ('a t, string) result
+  val decode_exn : (module NETWORK with type t = 'a) -> string -> 'a t
 end
 
 (*---------------------------------------------------------------------------

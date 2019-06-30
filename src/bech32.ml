@@ -175,38 +175,41 @@ module Segwit = struct
     type t
 
     val t : t
+    val version : int option
     val prefix : string
   end
 
   module Btc = struct
     type t = [`Btc]
     let t = `Btc
+    let version = Some 0
     let prefix = "bc"
   end
   module Tbtc = struct
     type t = [`Tbtc]
     let t = `Tbtc
+    let version = Some 0
     let prefix = "tb"
   end
   module Zil = struct
     type t = [`Zil]
     let t = `Zil
+    let version = None
     let prefix = "zil"
   end
 
   type 'a t = {
     network : (module NETWORK with type t = 'a) ;
-    version : int option ;
     prog : string ;
   }
 
-  let create ?version network prog = { network ; version ; prog }
+  let create network prog = { network ; prog }
 
-  let encode (type a) ({ network ; version ; prog } : a t) =
+  let encode (type a) ({ network ; prog } : a t) =
     let module N = (val network : NETWORK with type t = a) in
     let prog = convertbits_exn ~pad:true ~frombits:8 ~tobits:5 prog in
     let proglen = String.length prog in
-    match version with
+    match N.version with
     | None ->
       let buf = Bytes.create proglen in
       Bytes.blit_string prog 0 buf 0 proglen ;
@@ -222,7 +225,7 @@ module Segwit = struct
     | Error e -> invalid_arg ("encode_exn: " ^ e)
     | Ok v -> v
 
-  let decode (type a) ?(version=true) network addr =
+  let decode (type a) network addr =
     let module N = (val network : NETWORK with type t = a) in
     decode addr >>= fun (hrp, data) ->
     let datalen = String.length data in
@@ -230,8 +233,8 @@ module Segwit = struct
     let hrplow = String.Ascii.lowercase hrp in
     if hrplow <> N.prefix then
       Error ("invalid segwit hrp " ^ hrp) else Ok () >>= fun () ->
-    match version with
-    | false ->
+    match N.version with
+    | None ->
       convertbits data ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
       let decodedlen = String.length decoded in
       (if decodedlen = 0 || decodedlen < 2 || decodedlen > 40
@@ -239,7 +242,7 @@ module Segwit = struct
       (if decodedlen <> 20 && decodedlen <> 32 then
          Error "invalid segwit length" else Ok ()) >>= fun () ->
       Ok (create network decoded)
-    | true ->
+    | Some _ ->
       let decoded = String.(sub data ~start:1 ~stop:datalen |> Sub.to_string) in
       convertbits decoded ~pad:false ~frombits:5 ~tobits:8 >>= fun decoded ->
       let decodedlen = String.length decoded in
@@ -250,10 +253,10 @@ module Segwit = struct
          Error "invalid segwit version" else Ok ()) >>= fun () ->
       (if version = 0 && decodedlen <> 20 && decodedlen <> 32 then
          Error "invalid segwit length" else Ok ()) >>= fun () ->
-      Ok (create network ~version decoded)
+      Ok (create network decoded)
 
-  let decode_exn ?version net t =
-    match decode ?version net t with
+  let decode_exn net t =
+    match decode net t with
     | Error e -> invalid_arg ("decode_exn: " ^ e)
     | Ok v -> v
 end
