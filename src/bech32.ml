@@ -198,10 +198,35 @@ module Segwit = struct
     let prefix = "zil"
   end
 
+  let btc ~version = (module struct
+    type t = [`Btc]
+    let t = `Btc
+    let version = version
+    let prefix = "bc"
+  end : NETWORK with type t = [`Btc])
+
+  let tbtc ~version = (module struct
+    type t = [`Tbtc]
+    let t = `Tbtc
+    let version = version
+    let prefix = "tb"
+  end : NETWORK with type t = [`Tbtc])
+
   type 'a t = {
     network : (module NETWORK with type t = 'a) ;
     prog : string ;
   }
+
+  let scriptPubKey : type a. a t -> string = fun { network ; prog } ->
+    let module N = (val network : NETWORK with type t = a) in
+    let proglen = String.length prog in
+    let buf = Bytes.create (proglen + 2) in
+    Bytes.set buf 0 (Char.of_byte (match N.version with
+        | None -> invalid_arg "scriptpubkey: version must exist"
+        | Some 0 -> 0 | Some i -> 0x50+i)) ;
+    Bytes.set buf 1 (Char.of_byte proglen) ;
+    Bytes.blit_string prog 0 buf 2 proglen ;
+    Bytes.unsafe_to_string buf
 
   let create network prog = { network ; prog }
 

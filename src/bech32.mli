@@ -23,10 +23,15 @@ module Segwit : sig
   module Tbtc : NETWORK with type t = [`Tbtc]
   module Zil : NETWORK with type t = [`Zil]
 
+  val btc : version:int option -> (module NETWORK with type t = [ `Btc ])
+  val tbtc : version:int option -> (module NETWORK with type t = [ `Tbtc ])
+
   type 'a t = private {
     network : (module NETWORK with type t = 'a) ;
     prog : string ;
   }
+
+  val scriptPubKey : 'a t -> string
 
   val pp : Format.formatter -> _ t -> unit
 
