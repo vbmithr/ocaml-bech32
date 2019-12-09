@@ -15,7 +15,7 @@ module Segwit : sig
     type t
 
     val t : t
-    val version : int option
+    val version : bool
     val prefix : string
   end
 
@@ -23,11 +23,9 @@ module Segwit : sig
   module Tbtc : NETWORK with type t = [`Tbtc]
   module Zil : NETWORK with type t = [`Zil]
 
-  val btc : version:int option -> (module NETWORK with type t = [ `Btc ])
-  val tbtc : version:int option -> (module NETWORK with type t = [ `Tbtc ])
-
   type 'a t = private {
     network : (module NETWORK with type t = 'a) ;
+    version : int option ;
     prog : string ;
   }
 
@@ -35,7 +33,7 @@ module Segwit : sig
 
   val pp : Format.formatter -> _ t -> unit
 
-  val create : (module NETWORK with type t = 'a) -> string -> 'a t
+  val create : ?version:int -> (module NETWORK with type t = 'a) -> string -> 'a t
 
   val encode : _ t -> (string, string) result
   val encode_exn : _ t -> string

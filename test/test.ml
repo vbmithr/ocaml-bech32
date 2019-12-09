@@ -45,9 +45,9 @@ let test_changebase = [
 ]
 
 let valid_vectors_mainnet = [
-  "0014751e76e8199196d454941c45d1b3a323f1433bd6", "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4", Some 0;
-  "6002751e", "BC1SW50QA3JX3S", Some 16;
-  "5210751e76e8199196d454941c45d1b3a323", "bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj", Some 2;
+  "0014751e76e8199196d454941c45d1b3a323f1433bd6", "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4";
+  "6002751e", "BC1SW50QA3JX3S";
+  "5210751e76e8199196d454941c45d1b3a323", "bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj";
 ]
 
 let valid_vectors_testnet = [
@@ -69,8 +69,8 @@ let decode_check_valid :
     | Error msg -> failwith msg
     | Ok addr -> check string "decode_check_valid_encoded" (String.Ascii.lowercase v) addr
 
-let decode_check_valid_mainnet = ListLabels.map valid_vectors_mainnet ~f:begin fun (hex, v, version) ->
-    v, `Quick, decode_check_valid (Segwit.btc ~version) hex v
+let decode_check_valid_mainnet = ListLabels.map valid_vectors_mainnet ~f:begin fun (hex, v) ->
+    v, `Quick, decode_check_valid (module Segwit.Btc) hex v
   end
 
 let decode_check_valid_testnet = ListLabels.map valid_vectors_testnet ~f:begin fun (hex, v) ->
@@ -98,7 +98,7 @@ let decode_invalid :
   fun m v () ->
   match Segwit.decode m v with
   | Error _ -> ()
-  | Ok { network = _ ; prog } ->
+  | Ok { prog; _ } ->
     failwith (Printf.sprintf "prog=[%S]" prog)
 
 let decode_check_invalid_mainnet = ListLabels.map invalid_vectors_mainnet ~f:begin fun v ->
