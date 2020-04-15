@@ -1,12 +1,11 @@
 open Alcotest
-open Astring
 open Bech32
 
+let random_string n = String.init n (fun _ -> Char.chr @@ Random.int 256)
+
 let test_changebase_simple () =
-  let buf = Bigstring.create 100 in
   for _ = 0 to 100 do
-    let _ = Monocypher.Rand.write buf in
-    let rand = Bigstring.to_string buf in
+    let rand = random_string 100 in
     match convertbits ~pad:true ~frombits:8 ~tobits:5 rand with
     | Error msg -> failwith (Printf.sprintf "from %d to %d: %s" 8 5 msg)
     | Ok rand' -> (
@@ -14,29 +13,6 @@ let test_changebase_simple () =
         | Error msg -> failwith (Printf.sprintf "from %d to %d: %s" 5 8 msg)
         | Ok rand'' -> check string "changebase_simple" rand rand'' )
   done
-
-(* let test_changebase () =
- *   let buf = Bigstring.create 100 in
- *   for _ = 0 to 100 do
- *     for frombits = 5 to 8 do
- *       for tobits = 5 to 8 do
- *         let _ = Monocypher.Rand.write buf in
- *         let rand = Bigstring.to_string buf in
- *         match convertbits ~pad:true ~frombits:8 ~tobits:frombits rand with
- *         | Error msg ->
- *           failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
- *         | Ok rand' ->
- *           match convertbits ~pad:true ~frombits ~tobits rand' with
- *           | Error msg ->
- *             failwith (Printf.sprintf "from %d to %d: %s" frombits tobits msg)
- *           | Ok rand'' ->
- *             match convertbits ~pad:false ~frombits:tobits ~tobits:frombits rand' with
- *             | Error msg ->
- *               failwith (Printf.sprintf "from %d to %d: %s" tobits frombits msg)
- *             | Ok rand''' -> compare_bytes rand rand''
- *       done
- *     done
- *   done *)
 
 let test_changebase = [ ("random_simple", `Quick, test_changebase_simple) ]
 
@@ -72,7 +48,7 @@ let decode_check_valid :
       match Segwit.encode t with
       | Error msg -> failwith msg
       | Ok addr ->
-          check string "decode_check_valid_encoded" (String.Ascii.lowercase v)
+          check string "decode_check_valid_encoded" (String.lowercase_ascii v)
             addr )
 
 let decode_check_valid_mainnet =

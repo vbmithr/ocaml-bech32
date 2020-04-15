@@ -14,5 +14,7 @@ depends: [
   "dune" {>= "2.4.0"}
   "rresult" {>= "0.6.0"}
   "astring" {>= "0.8.3"}
+  "hex" {with-test & >= "1.4.0"}
+  "alcotest" {with-test & >= "1.1.0"}
 ]
 synopsis: "Bech32 addresses for OCaml (see https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki)"
