@@ -1,16 +1,18 @@
 opam-version: "2.0"
 name: "bech32"
-version: "0.1"
 maintainer: "Vincent Bernardoff <vb@luminar.eu.org>"
 authors: ["Vincent Bernardoff <vb@luminar.eu.org>"]
 homepage: "https://github.com/vbmithr/ocaml-bech32"
 license: "ISC"
-dev-repo: "https://github.com/vbmithr/ocaml-bech32.git"
+dev-repo: "git+https://github.com/vbmithr/ocaml-bech32.git"
+doc: "https://vbmithr.github.io/ocaml-bech32/doc"
 bug-reports: "https://github.com/vbmithr/ocaml-bech32/issues"
-tags: []
+tags: ["bitcoin"]
+build:    [ "dune" "build" "-j" jobs "-p" name ]
+run-test: [ "dune" "runtest" "-j" jobs "-p" name ]
 depends: [
-  "dune" {build & >= "1.0"}
+  "dune" {>= "2.4.0"}
   "rresult" {>= "0.6.0"}
   "astring" {>= "0.8.3"}
 ]
-build: [ "dune" "build" "-j" jobs "-p" name "@install" ]
+synopsis: "Bech32 addresses for OCaml (see https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki)"
