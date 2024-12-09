@@ -1,7 +1,8 @@
+open StdLabels
 open Alcotest
 open Bech32
 
-let random_string n = String.init n (fun _ -> Char.chr @@ Random.int 256)
+let random_string n = String.init n ~f:(fun _ -> Char.chr @@ Random.int 256)
 
 let test_changebase_simple () =
   for _ = 0 to 100 do
@@ -15,7 +16,7 @@ let test_changebase_simple () =
   done
 ;;
 
-let test_changebase = [ "random_simple", `Quick, test_changebase_simple ]
+let test_changebase = [ test_case "random_simple" `Quick test_changebase_simple ]
 
 let valid_vectors_mainnet =
   [ ( "0014751e76e8199196d454941c45d1b3a323f1433bd6"
@@ -51,13 +52,13 @@ let decode_check_valid
 ;;
 
 let decode_check_valid_mainnet =
-  ListLabels.map valid_vectors_mainnet ~f:(fun (hex, v) ->
-    v, `Quick, decode_check_valid (module Segwit.Btc) hex v)
+  List.map valid_vectors_mainnet ~f:(fun (hex, v) ->
+    test_case v `Quick (decode_check_valid (module Segwit.Btc) hex v))
 ;;
 
 let decode_check_valid_testnet =
-  ListLabels.map valid_vectors_testnet ~f:(fun (hex, v) ->
-    v, `Quick, decode_check_valid (module Segwit.Tbtc) hex v)
+  List.map valid_vectors_testnet ~f:(fun (hex, v) ->
+    test_case v `Quick (decode_check_valid (module Segwit.Tbtc) hex v))
 ;;
 
 let invalid_vectors_mainnet =
@@ -88,13 +89,13 @@ let decode_invalid
 ;;
 
 let decode_check_invalid_mainnet =
-  ListLabels.map invalid_vectors_mainnet ~f:(fun v ->
-    v, `Quick, decode_invalid (module Segwit.Btc) v)
+  List.map invalid_vectors_mainnet ~f:(fun v ->
+    test_case v `Quick (decode_invalid (module Segwit.Btc) v))
 ;;
 
 let decode_check_invalid_testnet =
-  ListLabels.map invalid_vectors_testnet ~f:(fun v ->
-    v, `Quick, decode_invalid (module Segwit.Tbtc) v)
+  List.map invalid_vectors_testnet ~f:(fun v ->
+    test_case v `Quick (decode_invalid (module Segwit.Tbtc) v))
 ;;
 
 let valid_vectors =
@@ -124,22 +125,15 @@ let invalid_vectors =
   ]
 ;;
 
-let valid_encoding s () =
-  match decode s with
-  | Error msg -> failwith msg
-  | Ok _ -> ()
-;;
+let valid_encoding s () = check bool s true (Result.is_ok (decode s))
+let invalid_encoding s () = check bool s true (Result.is_error (decode s))
 
-let invalid_encoding s () =
-  match decode s with
-  | Error _ -> ()
-  | Ok _ -> failwith ""
+let decode_valid =
+  List.map valid_vectors ~f:(fun v -> test_case v `Quick (valid_encoding v))
 ;;
-
-let decode_valid = ListLabels.map valid_vectors ~f:(fun v -> v, `Quick, valid_encoding v)
 
 let decode_invalid =
-  ListLabels.map invalid_vectors ~f:(fun v -> v, `Quick, invalid_encoding v)
+  List.map invalid_vectors ~f:(fun v -> test_case v `Quick (invalid_encoding v))
 ;;
 
 let () =

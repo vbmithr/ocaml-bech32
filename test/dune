@@ -1,4 +1,8 @@
 (test
  (name test)
- (modules Test)
- (libraries bech32 hex alcotest))
+ (libraries
+   bech32
+   hex
+   alcotest
+ )
+)
