@@ -3,6 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+val convertbits_exn : pad:bool -> frombits:int -> tobits:int -> string -> string
+
 val convertbits
   :  pad:bool
   -> frombits:int
@@ -13,34 +15,6 @@ val convertbits
 val encode : hrp:string -> string -> (string, string) result
 val encode5 : hrp:string -> string -> (string, string) result
 val decode : string -> (string * string, string) result
-
-module Segwit : sig
-  module type NETWORK = sig
-    type t
-
-    val t : t
-    val version : bool
-    val prefix : string
-  end
-
-  module Btc : NETWORK with type t = [ `Btc ]
-  module Tbtc : NETWORK with type t = [ `Tbtc ]
-  module Zil : NETWORK with type t = [ `Zil ]
-
-  type 'a t = private
-    { network : (module NETWORK with type t = 'a)
-    ; version : int option
-    ; prog : string
-    }
-
-  val scriptPubKey : 'a t -> string
-  val pp : Format.formatter -> _ t -> unit
-  val create : ?version:int -> (module NETWORK with type t = 'a) -> string -> 'a t
-  val encode : _ t -> (string, string) result
-  val encode_exn : _ t -> string
-  val decode : (module NETWORK with type t = 'a) -> string -> ('a t, string) result
-  val decode_exn : (module NETWORK with type t = 'a) -> string -> 'a t
-end
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2018 Vincent Bernardoff

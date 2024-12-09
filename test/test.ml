@@ -34,31 +34,36 @@ let valid_vectors_testnet =
   ]
 ;;
 
-let decode_check_valid
-  : type a. (module Segwit.NETWORK with type t = a) -> string -> string -> unit -> unit
-  =
-  fun m hex v () ->
-  match Segwit.(decode m v) with
-  | Error msg -> failwith msg
-  | Ok t ->
-    let module N = (val m : Segwit.NETWORK with type t = a) in
-    let script = Segwit.scriptPubKey t in
+module MakeSegwit (N : Segwit.NETWORK) = struct
+  include Segwit.Make (N)
+
+  let decode_check_valid hex v () =
+    let t = of_string v in
+    let script = scriptPubKey t in
     let (`Hex decoded) = Hex.of_string script in
     check string "decode_check_valid_decoded" hex decoded;
-    (match Segwit.encode t with
-     | Error msg -> failwith msg
-     | Ok addr ->
-       check string "decode_check_valid_encoded" (String.lowercase_ascii v) addr)
-;;
+    let addr = to_string t in
+    check string "decode_check_valid_encoded" (String.lowercase_ascii v) addr
+  ;;
+
+  let decode_invalid v () =
+    match of_string_error v with
+    | Error _ -> ()
+    | Ok t -> failwith (Printf.sprintf "prog=[%S]" (prog t))
+  ;;
+end
+
+module SegMain = MakeSegwit (Segwit.Btc)
+module SegTest = MakeSegwit (Segwit.Tbtc)
 
 let decode_check_valid_mainnet =
   List.map valid_vectors_mainnet ~f:(fun (hex, v) ->
-    test_case v `Quick (decode_check_valid (module Segwit.Btc) hex v))
+    test_case v `Quick (SegMain.decode_check_valid hex v))
 ;;
 
 let decode_check_valid_testnet =
   List.map valid_vectors_testnet ~f:(fun (hex, v) ->
-    test_case v `Quick (decode_check_valid (module Segwit.Tbtc) hex v))
+    test_case v `Quick (SegTest.decode_check_valid hex v))
 ;;
 
 let invalid_vectors_mainnet =
@@ -79,23 +84,14 @@ let invalid_vectors_testnet =
   ]
 ;;
 
-let decode_invalid
-  : type a. (module Segwit.NETWORK with type t = a) -> string -> unit -> unit
-  =
-  fun m v () ->
-  match Segwit.decode m v with
-  | Error _ -> ()
-  | Ok { prog; _ } -> failwith (Printf.sprintf "prog=[%S]" prog)
-;;
-
 let decode_check_invalid_mainnet =
   List.map invalid_vectors_mainnet ~f:(fun v ->
-    test_case v `Quick (decode_invalid (module Segwit.Btc) v))
+    test_case v `Quick (SegMain.decode_invalid v))
 ;;
 
 let decode_check_invalid_testnet =
   List.map invalid_vectors_testnet ~f:(fun v ->
-    test_case v `Quick (decode_invalid (module Segwit.Tbtc) v))
+    test_case v `Quick (SegTest.decode_invalid v))
 ;;
 
 let valid_vectors =
