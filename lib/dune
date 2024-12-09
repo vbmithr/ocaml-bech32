@@ -1,4 +1,7 @@
 (library
  (name            bech32)
  (public_name     bech32)
- (libraries       rresult astring))
+ (libraries
+   base
+ )
+)
